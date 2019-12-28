@@ -81,8 +81,9 @@ class Scorer:
 
         for k in range(0, knots):
             for l in range(1, self.layers):
-                index_graph[k,l] = np.argmax(graph[:k+1,l-1] + real_dist_matrix[:k+1,k])
-                graph[k,l] = np.max(graph[:k+1,l-1] + real_dist_matrix[:k+1,k])
+                options_graph = graph[:k+1,l-1] + real_dist_matrix[:k+1,k]
+                index_graph[k,l] = np.argmax(options_graph)
+                graph[k,l] = options_graph[index_graph[k,l]]
 
         return graph, index_graph
 
