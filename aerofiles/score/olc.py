@@ -51,7 +51,8 @@ class Scorer:
         dists = haversine.pairwise(latlon)
         return 6371 * dists
 
-    def find_graph(self, dist_matrix, fake_dist_matrix=None):
+
+    def find_graph(self, real_dist_matrix, fake_dist_matrix=None):
         """
         Calculates (k,l) shaped graph where k is the number of knots
         (data points) and l is the number of layers or legs.
@@ -64,26 +65,27 @@ class Scorer:
         Fake_dist_matrix is used to only allow certain start indices that obey
         the height constrain.
         """
-        knots = np.shape(dist_matrix)[0]
+        knots = np.shape(real_dist_matrix)[0]
 
         graph = np.zeros((knots,self.layers))
         index_graph = np.zeros((knots,self.layers), dtype='int32')
 
         if fake_dist_matrix is not None:
-            for k in range(0, knots):
-                index_graph[k,0] = np.argmax(fake_dist_matrix[:k+1,k])
-                graph[k,0] = np.max(fake_dist_matrix[:k+1,k])
+            dist_matrix = fake_dist_matrix
         else:
-            for k in range(0, knots):
-                index_graph[k,0] = np.argmax(dist_matrix[:k+1,k])
-                graph[k,0] = np.max(dist_matrix[:k+1,k])
+            dist_matrix = real_dist_matrix
+        
+        for k in range(0, knots):
+            index_graph[k,0] = np.argmax(dist_matrix[:k+1,k])
+            graph[k,0] = np.max(dist_matrix[:k+1,k])
 
         for k in range(0, knots):
             for l in range(1, self.layers):
-                index_graph[k,l] = np.argmax(graph[:k+1,l-1] + dist_matrix[:k+1,k])
-                graph[k,l] = np.max(graph[:k+1,l-1] + dist_matrix[:k+1,k])
+                index_graph[k,l] = np.argmax(graph[:k+1,l-1] + real_dist_matrix[:k+1,k])
+                graph[k,l] = np.max(graph[:k+1,l-1] + real_dist_matrix[:k+1,k])
 
         return graph, index_graph
+
 
     def find_path(self, index_graph, reverse_from):
         """
