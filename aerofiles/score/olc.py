@@ -70,19 +70,25 @@ class Scorer:
         graph = np.zeros((knots,self.layers))
         index_graph = np.zeros((knots,self.layers), dtype='int32')
 
-        # copy reference to used dist_matrix (no extra storage)
+        # copy reference to used dist_matrix for init (no extra storage)
         if fake_dist_matrix is not None:
             dist_matrix = fake_dist_matrix
         else:
             dist_matrix = real_dist_matrix
         
+        # init
         for k in range(0, knots):
             graph[k,0] = np.max(dist_matrix[:k+1,k])
 
+        # for every layer
         for k in range(0, knots):
             for l in range(1, self.layers):
+                # maybe it's more efficient to calculate options graph both times?
+                # considering its only additions and I/O is slower than CPU?
+                # anyway.. this is more readable
                 options_graph = graph[:k+1,l-1] + real_dist_matrix[:k+1,k]
                 index_graph[k,l] = np.argmax(options_graph)
+                # get graph values by indizes
                 graph[k,l] = options_graph[index_graph[k,l]]
 
         return graph, index_graph
