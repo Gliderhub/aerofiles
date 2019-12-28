@@ -70,13 +70,13 @@ class Scorer:
         graph = np.zeros((knots,self.layers))
         index_graph = np.zeros((knots,self.layers), dtype='int32')
 
+        # copy reference to used dist_matrix (no extra storage)
         if fake_dist_matrix is not None:
             dist_matrix = fake_dist_matrix
         else:
             dist_matrix = real_dist_matrix
         
         for k in range(0, knots):
-            index_graph[k,0] = np.argmax(dist_matrix[:k+1,k])
             graph[k,0] = np.max(dist_matrix[:k+1,k])
 
         for k in range(0, knots):
