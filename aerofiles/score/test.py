@@ -2,6 +2,7 @@ import time
 from .olc import Scorer
 import numpy as np
 from math import radians
+import datetime as dt
 
 def timeit(n):
     scorer = Scorer()
@@ -58,4 +59,5 @@ def test_dist_matrix(n):
 scorer = Scorer()
 scorer.import_height_difference_flight()
 path = scorer.score_with_height()
-print(scorer.find_distance(path))
+print(scorer.time[path])
+print(scorer.alt[path])

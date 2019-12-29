@@ -28,7 +28,7 @@ class Scorer:
             parsed = Reader().read(f)
         records = parsed['fix_records'][1]
         for i, record in enumerate(records):
-            if record['time'] > tow_release:
+            if record['time'] == tow_release:
                 tow_release_index = i
                 break
         for i, record in enumerate(records):
@@ -39,6 +39,7 @@ class Scorer:
         records = records[tow_release_index:engine_start_index]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array([r['time'] for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
     def import_longer_flight(self):
@@ -98,7 +99,7 @@ class Scorer:
         condensed = scipy.spatial.distance.pdist(latlon, 'euclidean')
         return scipy.spatial.distance.squareform(condensed)
 
-    def find_graph(self, real_dist_matrix, fake_dist_matrix=None):
+    def find_graph(self, dist_matrix, fake_dist_matrix=None):
         """
         Calculates (k,l) shaped graph where k is the number of knots
         (data points) and l is the number of layers or legs.
@@ -111,20 +112,20 @@ class Scorer:
         Fake_dist_matrix is used to only allow certain start indices that obey
         the height constrain.
         """
-        knots = np.shape(real_dist_matrix)[0]
+        knots = np.shape(dist_matrix)[0]
 
         graph = np.zeros((knots,self.layers))
         index_graph = np.zeros((knots,self.layers), dtype='int32')
 
         # copy reference to used dist_matrix for init (no extra storage)
         if fake_dist_matrix is not None:
-            dist_matrix = fake_dist_matrix
+            for k in range(0, knots):
+                index_graph[k,0] = np.argmax(fake_dist_matrix[:k+1,k])
+                graph[k,0] = fake_dist_matrix[:k+1,k][index_graph[k,0]]
         else:
-            dist_matrix = real_dist_matrix
-
-        for k in range(0, knots):
-            index_graph[k,0] = np.argmax(dist_matrix[:k+1,k])
-            graph[k,0] = dist_matrix[:k+1,k][index_graph[k,0]]
+            for k in range(0, knots):
+                index_graph[k,0] = np.argmax(dist_matrix[:k+1,k])
+                graph[k,0] = dist_matrix[:k+1,k][index_graph[k,0]]
 
         # iterating every layer is vectorized
         for k in range(0, knots):
@@ -135,7 +136,7 @@ class Scorer:
 
         return graph, index_graph
 
-    def find_graph_vectorized(self, real_dist_matrix, fake_dist_matrix=None):
+    def find_graph_vectorized(self, dist_matrix, fake_dist_matrix=None):
         """
         Calculates (k,l) shaped graph where k is the number of knots
         (data points) and l is the number of layers or legs.
@@ -148,25 +149,24 @@ class Scorer:
         Fake_dist_matrix is used to only allow certain start indices that obey
         the height constrain.
         """
-        knots = np.shape(real_dist_matrix)[0]
+        knots = np.shape(dist_matrix)[0]
 
         graph = np.zeros((knots,self.layers))
         index_graph = np.zeros((knots,self.layers), dtype='int32')
 
         # copy reference to used dist_matrix for init (no extra storage)
         if fake_dist_matrix is not None:
-            dist_matrix = fake_dist_matrix
+            index_graph[k,0] = np.argmax(fake_dist_matrix[:k+1,k])
+            graph[k,0] = fake_dist_matrix[:k+1,k][index_graph[k,0]]
         else:
-            dist_matrix = real_dist_matrix
-
-        for k in range(0, knots):
-            index_graph[k,0] = np.argmax(dist_matrix[:k+1,k])
-            graph[k,0] = dist_matrix[:k+1,k][index_graph[k,0]]
+            for k in range(0, knots):
+                index_graph[k,0] = np.argmax(dist_matrix[:k+1,k])
+                graph[k,0] = dist_matrix[:k+1,k][index_graph[k,0]]
 
         # iterating every layer is vectorized
         for k in range(0, knots):
             options_graph = (graph[:k+1,:self.layers-1] +
-                np.expand_dims(real_dist_matrix[:k+1,k], axis=1))
+                np.expand_dims(dist_matrix[:k+1,k], axis=1))
 
             index_graph[k,1:] = np.argmax(options_graph, axis=0)
             col_idx = np.arange(np.shape(options_graph)[1])
@@ -254,10 +254,10 @@ class Scorer:
 
         calculated = []
         lower_bound = 0
+        lower_bound_km = 0
         best_path = []
 
         while True:
-            print(f'Lower bound: {lower_bound}')
             reverse_from = np.argmax(graph[:,self.layers-1])
             forbidden_start_index = np.nonzero(self.alt-self.alt[reverse_from] > 1000)[0]
 
@@ -272,18 +272,19 @@ class Scorer:
             height_graph[calculated, self.layers-1] = 0
             graph[calculated,self.layers-1] = 0
 
+            # some tests while developing
             for j in forbidden_start_index:
                 assert(path[0]!=j)
-
-            if not self.check_alt(path):
-                print(self.alt[path[0]], self.alt[path[-1]])
-                return
+            assert(self.check_alt(path))
 
             distance = self.distance_from_graph(height_graph)
             if distance > lower_bound:
                 lower_bound = distance
+                lower_bound_km = self.find_distance(path)
                 best_path = path
 
+            print(f'Lower bound: {lower_bound_km}')
+            
             # do we still have options to check?
             remaining = np.nonzero(graph[:,self.layers-1] > lower_bound)[0]
             if not len(remaining):
