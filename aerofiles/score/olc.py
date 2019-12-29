@@ -6,6 +6,7 @@ from sklearn.neighbors import DistanceMetric
 from math import radians
 
 from aerofiles.igc import Reader
+from rdp import rdp
 
 
 class Scorer:
@@ -18,6 +19,24 @@ class Scorer:
     def __init__(self):
         self.layers = 6
         self.test_data_dir = 'aerofiles/score/test_data'
+
+    def import_torben_flight(self):
+        tow_release = datetime.time(9, 2, 0)
+
+        test_file = os.path.join(self.test_data_dir, '87ilqqk1.igc')
+        with open(test_file, 'r') as f:
+            parsed = Reader().read(f)
+        records = parsed['fix_records'][1]
+        for i, record in enumerate(records):
+            if record['time'] >= tow_release:
+                tow_release_index = i
+                break
+
+        records = records[tow_release_index:]
+        self.lat = np.array([r['lat'] for r in records])
+        self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array([r['time'] for r in records])
+        self.alt = np.array([r['pressure_alt'] for r in records])
 
     def import_height_difference_flight(self):
         tow_release = datetime.time(8, 28, 48)
@@ -58,8 +77,9 @@ class Scorer:
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
+        self.time = np.array([r['time'] for r in records])
 
-    def import_perlan(self):
+    def import_perlan_flight(self):
         tow_release = datetime.time(16, 54, 10)
 
         test_file = os.path.join(self.test_data_dir, '99bv7r92.igc')
@@ -75,6 +95,7 @@ class Scorer:
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
+        self.time = np.array([r['time'] for r in records])
 
     def import_simple_flight(self):
         test_file = os.path.join(self.test_data_dir, '825lqkk1.igc')
@@ -85,6 +106,7 @@ class Scorer:
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
+        self.time = np.array([r['time'] for r in records])
 
     def haversine_dist_matrix(self, latlon):
         haversine = DistanceMetric.get_metric('haversine')
@@ -231,6 +253,8 @@ class Scorer:
         (3) Based on the maximum reachable distance in the last layer, the
             index Graph is traversed to find the corresponding indices
         """
+        if not(len(self.alt) == len(self.lat) == len(self.lon) == True):
+            return []
 
         latlon = np.transpose(np.vstack([np.radians(self.lat), np.radians(self.lon)]))
         dist_matrix = self.simple_dist_matrix(latlon)
@@ -238,18 +262,37 @@ class Scorer:
 
         return self.find_path(index_graph, reverse_from=np.argmax(graph[:,self.layers-1]))
 
-    def check_alt(self, path):
-        return self.alt[path[0]]-self.alt[path[-1]] <= 1000
+    def score_with_height(self, epsilon=None):
+        if not(len(self.alt) == len(self.lat) == len(self.lon) == True):
+            return []
 
-    def score_with_height(self):
-        latlon = np.transpose(np.vstack([np.radians(self.lat), np.radians(self.lon)]))
+        def check_alt(alt, path):
+            return alt[path[0]]-alt[path[-1]] <= 1000
+
+        latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
+        latlonalt = np.column_stack([np.radians(self.lat), np.radians(self.lon), self.alt])
+
+        # calculate Ramer-Douglas-Peucker simplification if epsilon is given
+        if epsilon is not None:
+            mask = rdp(latlonalt, epsilon=epsilon, algo="iter", return_mask=True)
+            translate_indices = np.argwhere(mask)
+
+            latlon = latlon[mask]
+            lat = self.lat[mask]
+            lon = self.lon[mask]
+            alt = self.alt[mask]
+        else:
+            lat, lon, alt = self.lat, self.lon, self.alt
+
+        print(len(self.lat), len(lat))
+
         dist_matrix = self.simple_dist_matrix(latlon)
-
         graph, index_graph = self.find_graph_vectorized(dist_matrix)
         path = self.find_path(index_graph, reverse_from=np.argmax(graph[:,self.layers-1]))
 
-        # Height constrain already fullfilled
-        if self.check_alt(path):
+        if check_alt(alt, path):
+            if epsilon is not None:
+                return translate_indices[path]
             return path
 
         calculated = []
@@ -275,7 +318,7 @@ class Scorer:
             # some tests while developing
             for j in forbidden_start_index:
                 assert(path[0]!=j)
-            assert(self.check_alt(path))
+            assert(check_alt(alt, path)) # careful with self.alt alt
 
             distance = self.distance_from_graph(height_graph)
             if distance > lower_bound:
@@ -284,8 +327,10 @@ class Scorer:
                 best_path = path
 
             print(f'Lower bound: {lower_bound_km}')
-            
+
             # do we still have options to check?
             remaining = np.nonzero(graph[:,self.layers-1] > lower_bound)[0]
             if not len(remaining):
+                if epsilon:
+                    return translate_indices[best_path]
                 return best_path

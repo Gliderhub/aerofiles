@@ -6,12 +6,12 @@ import datetime as dt
 
 def timeit(n):
     scorer = Scorer()
-    scorer.import_longer_flight()
+    scorer.import_perlan_flight()
 
+    latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
     start_time = time.time()
     for i in range(n):
-        latlon = np.transpose(np.vstack([np.radians(scorer.lat), np.radians(scorer.lon)]))
-        dist_matrix = scorer.dist_matrix(latlon)
+        dist_matrix = scorer.simple_dist_matrix(latlon)
     print("Dist matrix %s seconds ---" % ((time.time() - start_time)/n))
 
     start_time = time.time()
@@ -32,13 +32,13 @@ def test_dist_matrix(n):
 
     start_time = time.time()
     for i in range(n):
-        latlon = np.transpose(np.vstack([np.radians(scorer.lat), np.radians(scorer.lon)]))
+        latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
         dist_matrix = scorer.haversine_dist_matrix(latlon)
     print("Haversine matrix %s seconds ---" % ((time.time() - start_time)/n))
 
     start_time = time.time()
     for i in range(n):
-        latlon = np.transpose(np.vstack([np.radians(scorer.lat), np.radians(scorer.lon)]))
+        latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
         simple_dist_matrix = scorer.simple_dist_matrix(latlon)
     print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
 
@@ -56,8 +56,31 @@ def test_dist_matrix(n):
 
     assert(path1==path2)
 
-scorer = Scorer()
-scorer.import_height_difference_flight()
-path = scorer.score_with_height()
-print(scorer.time[path])
-print(scorer.alt[path])
+def time_douglas_peucker(n, epsilon_meter=500):
+    scorer = Scorer()
+    scorer.import_simple_flight()
+
+    epsilon = epsilon_meter / 6371000
+
+    start_time = time.time()
+    for i in range(n):
+        path = scorer.score_with_height(epsilon=epsilon)
+    print("With douglas peucker %s seconds ---" % ((time.time() - start_time)/n))
+    print(f'Distance: {scorer.find_distance(path)}')
+
+    start_time = time.time()
+    for i in range(n):
+        path = scorer.score_with_height()
+    print("Without douglas peucker %s seconds ---" % ((time.time() - start_time)/n))
+    print(f'Distance: {scorer.find_distance(path)}')
+
+def test_small_flight(n):
+    scorer = Scorer()
+    scorer.alt = [1000] * n
+    scorer.lat = list(range(1, 1+n))
+    scorer.lon = list(range(1, 1+n))
+    print(len(scorer.alt), len(scorer.lat), len(scorer.lon))
+    path = scorer.score()
+    print(path)
+
+timeit(2)
