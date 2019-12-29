@@ -6,6 +6,7 @@ import aerofiles.openair
 import aerofiles.seeyou
 import aerofiles.welt2000
 import aerofiles.xcsoar
+import aerofiles.score
 
 from aerofiles.flarmcfg import (
     Writer as FlarmConfigWriter,
@@ -32,4 +33,8 @@ from aerofiles.welt2000 import (
 
 from aerofiles.xcsoar import (
     Writer as XCSoarWriter,
+)
+
+from aerofiles.score import (
+    Scorer as OLCScorer,
 )
