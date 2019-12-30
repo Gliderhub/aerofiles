@@ -14,7 +14,6 @@ class Scorer:
     Find polygonal line of maximal length with data points as vertices.
     Height difference between starting point and end point is maximal 1000m.
     """
-
     def __init__(self):
         self.layers = 7
         self.test_data_dir = 'aerofiles/score/test_data'
@@ -37,11 +36,155 @@ class Scorer:
         self.time = np.array([r['time'] for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
+
+    def import_sebald1_flight(self):
+        """https://www.onlinecontest.org/olc-3.0/gliding/flightinfo.html?dsId=6866743
+
+        37 iterations backward, 111 iterations forward
+        We: 644.21 km
+        OLC: 644.2 km
+        """
+        tow_release = datetime.time(8, 32, 1)
+
+        test_file = os.path.join(self.test_data_dir, '88qd4er1.igc')
+        with open(test_file, 'r') as f:
+            parsed = Reader().read(f)
+        records = parsed['fix_records'][1]
+        for i, record in enumerate(records):
+            if record['time'] >= tow_release:
+                tow_release_index = i
+                break
+
+        records = records[tow_release_index:]
+        self.lat = np.array([r['lat'] for r in records])
+        self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array([r['time'] for r in records])
+        self.alt = np.array([r['pressure_alt'] for r in records])
+
+    def import_sebald2_flight(self):
+        """https://www.onlinecontest.org/olc-3.0/gliding/flightinfo.html?dsId=6582743
+
+        OLC: 754.8 km
+        """
+        tow_release = datetime.time(8, 10, 38)
+
+        test_file = os.path.join(self.test_data_dir, '86uveqk1.igc')
+        with open(test_file, 'r') as f:
+            parsed = Reader().read(f)
+        records = parsed['fix_records'][1]
+        for i, record in enumerate(records):
+            if record['time'] >= tow_release:
+                tow_release_index = i
+                break
+
+        records = records[tow_release_index:]
+        self.lat = np.array([r['lat'] for r in records])
+        self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array([r['time'] for r in records])
+        self.alt = np.array([r['pressure_alt'] for r in records])
+
+    def import_sebald3_flight(self):
+        """https://www.onlinecontest.org/olc-3.0/gliding/flightinfo.html?dsId=7529473
+
+        63 iterations backward, 193 iterations forward
+        OLC: 565.4 km
+        We: 565.42 km
+        """
+        tow_release = datetime.time(8, 21, 21)
+
+        test_file = os.path.join(self.test_data_dir, '98elgac1.igc')
+        with open(test_file, 'r') as f:
+            parsed = Reader().read(f)
+        records = parsed['fix_records'][1]
+        for i, record in enumerate(records):
+            if record['time'] >= tow_release:
+                tow_release_index = i
+                break
+
+        records = records[tow_release_index:]
+        self.lat = np.array([r['lat'] for r in records])
+        self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array([r['time'] for r in records])
+        self.alt = np.array([r['pressure_alt'] for r in records])
+
+    def import_sebald4_flight(self):
+        """https://www.onlinecontest.org/olc-3.0/gliding/flightinfo.html?dsId=7396225
+
+        17 iterations backward, 56 iterations forward
+        OLC: 335.2 km
+        We: 335.23 km
+        """
+        tow_release = datetime.time(9, 15, 42)
+
+        test_file = os.path.join(self.test_data_dir, '97glgac1.igc')
+        with open(test_file, 'r') as f:
+            parsed = Reader().read(f)
+        records = parsed['fix_records'][1]
+        for i, record in enumerate(records):
+            if record['time'] >= tow_release:
+                tow_release_index = i
+                break
+
+        records = records[tow_release_index:]
+        self.lat = np.array([r['lat'] for r in records])
+        self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array([r['time'] for r in records])
+        self.alt = np.array([r['pressure_alt'] for r in records])
+
+    def import_sebald5_flight(self):
+        """https://www.onlinecontest.org/olc-3.0/gliding/flightinfo.html?dsId=7189530
+
+        122 iterations backward, 150 iterations forward
+        OLC: 725.3 km
+        We: 725.29 km
+        """
+        tow_release = datetime.time(8, 16, 12)
+
+        test_file = os.path.join(self.test_data_dir, '95nv1g91.igc')
+        with open(test_file, 'r') as f:
+            parsed = Reader().read(f)
+        records = parsed['fix_records'][1]
+        for i, record in enumerate(records):
+            if record['time'] >= tow_release:
+                tow_release_index = i
+                break
+
+        records = records[tow_release_index:]
+        self.lat = np.array([r['lat'] for r in records])
+        self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array([r['time'] for r in records])
+        self.alt = np.array([r['pressure_alt'] for r in records])
+
+    def import_sebald6_flight(self):
+        """https://www.onlinecontest.org/olc-3.0/gliding/flightinfo.html?dsId=7062937
+
+        69 iterations backward, 329 iterations forward
+        OLC: 62.3 km
+        We: 62.27 km
+        """
+        tow_release = datetime.time(9, 14, 20)
+
+        test_file = os.path.join(self.test_data_dir, '94cx2191.igc')
+        with open(test_file, 'r') as f:
+            parsed = Reader().read(f)
+        records = parsed['fix_records'][1]
+        for i, record in enumerate(records):
+            if record['time'] >= tow_release:
+                tow_release_index = i
+                break
+
+        records = records[tow_release_index:]
+        self.lat = np.array([r['lat'] for r in records])
+        self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array([r['time'] for r in records])
+        self.alt = np.array([r['pressure_alt'] for r in records])
+
+
     def import_height_difference_flight(self):
         tow_release = datetime.time(8, 28, 48)
         engine_start = datetime.time(15, 34, 0)
 
-        test_file = os.path.join(self.test_data_dir, '85cd7pd1.igc')
+        test_file = os.path.join(self.test_data_dir, '97glgac1.igc')
         with open(test_file, 'r') as f:
             parsed = Reader().read(f)
         records = parsed['fix_records'][1]
@@ -90,7 +233,7 @@ class Scorer:
                 tow_release_index = i
                 break
 
-        # records = records[tow_release_index:]
+        records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
@@ -112,8 +255,7 @@ class Scorer:
         theta = np.cos(np.mean(latlon[:,0]))
         latlon[:,1] *= theta
 
-        condensed = scipy.spatial.distance.pdist(latlon, 'euclidean')
-        return scipy.spatial.distance.squareform(condensed)
+        return scipy.spatial.distance.cdist(latlon, latlon, 'euclidean')
 
     def find_graph(self, dist_matrix, forbidden_start_index=[]):
         """
@@ -267,10 +409,10 @@ class Scorer:
         """
         if not(len(self.alt) == len(self.lat) == len(self.lon)):
             return []
+        self.alt_flipped = self.alt[::-1]
 
         def check_alt(alt, path):
-            alt_flipped = alt[::-1]
-            return alt_flipped[path[-1]]-alt_flipped[path[-0]] <= 1000
+            return self.alt_flipped[path[-1]]-self.alt_flipped[path[0]] <= 1000
 
         latlon = np.radians(np.column_stack([self.lat[::-1], self.lon[::-1]]))
 
@@ -290,9 +432,9 @@ class Scorer:
         while True:
             iterations += 1
             reverse_from = np.argmax(graph[self.layers-1,:])
-            forbidden_start_index = np.nonzero(self.alt-self.alt[reverse_from] > 1000)[0]
+            forbidden_stop_index = np.nonzero(self.alt_flipped[reverse_from]-self.alt_flipped > 1000)[0]
 
-            graph = self.find_graph(dist_matrix, forbidden_start_index)
+            graph = self.find_graph(dist_matrix, forbidden_stop_index)
             path = self.find_path(graph, dist_matrix, reverse_from=reverse_from)
 
             distance = graph[self.layers-1,reverse_from]
