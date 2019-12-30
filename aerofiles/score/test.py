@@ -1,5 +1,5 @@
 import time
-from .olc2 import Scorer
+from .olc import Scorer
 import numpy as np
 from math import radians
 import datetime as dt
@@ -9,30 +9,30 @@ def timeit(n):
 
     start_time = time.time()
     for i in range(n):
-        scorer.import_simple_flight()
-        path = scorer.score_with_height()
+        scorer.import_torben_flight()
+        path = scorer.score_with_height_backwards()
     print("New %s seconds ---" % ((time.time() - start_time)/n))
 
     print(path)
     print(scorer.find_distance(path))
     print([scorer.alt[p] for p in path])
+    print([scorer.time[p] for p in path])
 
 def test_dist_matrix(n):
     scorer = Scorer()
-    scorer.import_simple_flight()
+    scorer.import_perlan_flight()
 
     start_time = time.time()
     for i in range(n):
-        latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
-        dist_matrix = scorer.haversine_dist_matrix(latlon)
-    print("Haversine matrix %s seconds ---" % ((time.time() - start_time)/n))
-
-    start_time = time.time()
-    for i in range(n):
-        latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
-        simple_dist_matrix = scorer.simple_dist_matrix(latlon)
+        latlon = np.column_stack([np.radians(scorer.lat), np.radians(scorer.lon)])
+        dist_matrix = scorer.simple_dist_matrix(latlon)
+        print(np.shape(dist_matrix))
     print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
 
+    start_time = time.time()
+    for i in range(n):
+        scorer.score_with_height()
+    print("Scoring %s seconds ---" % ((time.time() - start_time)/n))
 
 def time_douglas_peucker(n, epsilon_meter=500):
     scorer = Scorer()

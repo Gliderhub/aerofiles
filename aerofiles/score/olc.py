@@ -16,7 +16,7 @@ class Scorer:
     """
 
     def __init__(self):
-        self.layers = 6
+        self.layers = 7
         self.test_data_dir = 'aerofiles/score/test_data'
 
     def import_torben_flight(self):
@@ -115,60 +115,38 @@ class Scorer:
         condensed = scipy.spatial.distance.pdist(latlon, 'euclidean')
         return scipy.spatial.distance.squareform(condensed)
 
-    def find_graph(self, dist_matrix, fake_dist_matrix=None):
+    def find_graph(self, dist_matrix, forbidden_start_index=[]):
         """
-        Calculates (k,l) shaped graph where k is the number of knots
+        Calculates (l,k) shaped graph where k is the number of knots
         (data points) and l is the number of layers or legs.
         Graph is used to store the optimum distance that can be achieved with
-        l layers and knot k.
-        The index graph stores the indices of the previous knot.
-        Fake_dist_matrix is used to only allow certain start indices that obey
-        the height constrain.
+        l layers at knot k.
         """
         knots = np.shape(dist_matrix)[0]
-
         graph = np.zeros((self.layers,knots))
-        index_graph = np.zeros((self.layers,knots), dtype='int32')
+        graph[0,forbidden_start_index] = -10000
 
-        # copy reference to used dist_matrix for init (no extra storage)
-        if fake_dist_matrix is not None:
-            fake_dist_matrix = fake_dist_matrix.T
-            for k in range(0, knots):
-                index_graph[0,k] = np.argmax(fake_dist_matrix[k,:k+1])
-                graph[0,k] = fake_dist_matrix[k,:k+1][index_graph[0,k]]
-        else:
-            for k in range(0, knots):
-                index_graph[0,k] = np.argmax(dist_matrix[k,:k+1])
-                graph[0,k] = dist_matrix[k,:k+1][index_graph[0,k]]
-
-        # iterating every layer is vectorized
         for k in range(0, knots):
-            options_graph = (graph[:self.layers-1,:k+1] +
-                np.expand_dims(dist_matrix[k,:k+1], axis=0))
-            index_graph[1:,k] = np.argmax(options_graph, axis=1)
-            row_idx = np.arange(np.shape(options_graph)[0])
-            graph[1:,k] = options_graph[row_idx,index_graph[1:,k]]
+            for l in range(self.layers-1):
+                options_graph = graph[l,:k+1] + dist_matrix[k,:k+1]
+                graph[l+1,k] = np.max(options_graph)
+        return graph
 
-        return graph.T, index_graph.T
-
-
-    def find_path(self, index_graph, reverse_from):
+    def find_path(self, graph, dist_matrix, reverse_from=None):
         """
         Calculates (k,l) shaped graph where k is the number of knots
         (data points) and l is the number of layers or legs.
         Graph is used to store the optimum distance that can be achieved with
         l layers and knot k.
-        The index graph stores the indices of the previous knot.
         """
-        path = [reverse_from]
+        if reverse_from is not None:
+            path = [reverse_from]
+        else:
+            path = [np.argmax(graph[self.layers-1:])]
 
-        for l in reversed(range(self.layers)):
-            path.append(index_graph[path[-1],l])
-
+        for l in reversed(range(self.layers-1)):
+            path.append(np.argmax(dist_matrix[path[-1],:path[-1]+1]+graph[l,:path[-1]+1]))
         return list(reversed(path))
-
-    def distance_from_graph(self, graph):
-        return np.max(graph[:,self.layers-1])
 
     def find_distance(self, path):
         """
@@ -199,70 +177,136 @@ class Scorer:
 
     def score(self):
         """
-        (1) Distance Matrix is calculated using haversine distance
-        (2) Graph and index graph are calculated
+        (1) Distance Matrix is calculated using flat projection
+        (2) Graph is calculated
         (3) Based on the maximum reachable distance in the last layer, the
             index Graph is traversed to find the corresponding indices
         """
         if not(len(self.alt) == len(self.lat) == len(self.lon)):
             return []
 
-        latlon = np.transpose(np.vstack([np.radians(self.lat), np.radians(self.lon)]))
+        latlon = np.radians(np.column_stack([self.lat, self.lon]))
         dist_matrix = self.simple_dist_matrix(latlon)
-        graph, index_graph = self.find_graph(dist_matrix)
+        graph = self.find_graph(dist_matrix)
+        return self.find_path(graph, dist_matrix)
 
-        return self.find_path(index_graph, reverse_from=np.argmax(graph[:,self.layers-1]))
+    def flip_path(self, path):
+        knots = len(self.lon)
+        return [knots-1-p for p in path][::-1]
 
-    def score_with_height(self, epsilon=None):
+    def score_backwards(self):
+        """
+        Traverses the flight backwards.
+        """
+        if not(len(self.alt) == len(self.lat) == len(self.lon)):
+            return []
+
+        latlon = np.radians(np.column_stack([self.lat[::-1], self.lon[::-1]]))
+        dist_matrix = self.simple_dist_matrix(latlon)
+        graph = self.find_graph(dist_matrix)
+        return self.flip_path(self.find_path(graph, dist_matrix))
+
+    def score_with_height(self):
         if not(len(self.alt) == len(self.lat) == len(self.lon)):
             return []
 
         def check_alt(alt, path):
             return alt[path[0]]-alt[path[-1]] <= 1000
 
-        latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
+        latlon = np.radians(np.column_stack([self.lat, self.lon]))
 
         dist_matrix = self.simple_dist_matrix(latlon)
-        graph, index_graph = self.find_graph(dist_matrix)
-        path = self.find_path(index_graph, reverse_from=np.argmax(graph[:,self.layers-1]))
+        graph = self.find_graph(dist_matrix)
+        path = self.find_path(graph, dist_matrix)
 
         if check_alt(self.alt, path):
             return path
 
         calculated = []
         lower_bound = 0
-        lower_bound_km = 0
         best_path = []
+        original_graph = np.copy(graph)
+        iterations = 0
 
         while True:
-            reverse_from = np.argmax(graph[:,self.layers-1])
+            iterations += 1
+            reverse_from = np.argmax(graph[self.layers-1,:])
             forbidden_start_index = np.nonzero(self.alt-self.alt[reverse_from] > 1000)[0]
 
-            fake_dist_matrix = np.copy(dist_matrix)
-            fake_dist_matrix[forbidden_start_index,:] = -10000
-
-            # only use the allowed indexes for the first turnpoint
-            height_graph, height_index_graph = self.find_graph(dist_matrix, fake_dist_matrix)
-            path = self.find_path(height_index_graph, reverse_from=reverse_from)
-
-            calculated.append(path[-1])
-            height_graph[calculated, self.layers-1] = 0
-            graph[calculated,self.layers-1] = 0
+            graph = self.find_graph(dist_matrix, forbidden_start_index)
+            path = self.find_path(graph, dist_matrix, reverse_from=reverse_from)
 
             # some tests while developing
             for j in forbidden_start_index:
                 assert(path[0]!=j)
             assert(check_alt(self.alt, path)) # careful with self.alt alt
 
-            distance = self.distance_from_graph(height_graph)
+            distance = graph[self.layers-1,reverse_from]
             if distance > lower_bound:
                 lower_bound = distance
-                lower_bound_km = self.find_distance(path)
                 best_path = path
 
-            print(f'Lower bound: {lower_bound_km}')
+            calculated.append(path[-1])
+            graph[self.layers-1, calculated] = 0
+            original_graph[self.layers-1, calculated] = 0
 
             # do we still have options to check?
-            remaining = np.nonzero(graph[:,self.layers-1] > lower_bound)[0]
+            remaining = np.nonzero(original_graph[self.layers-1,:] > lower_bound)[0]
             if not len(remaining):
+                print(f'{iterations} iterations needed')
                 return best_path
+            print(f'Remaining options: {len(remaining)}')
+
+    def score_with_height_backwards(self):
+        """
+        Like score_with_height, only backwards. This is probably faster for
+        the average flight, as the optimal solution is often closer to the
+        starting point than the ending point.
+        Maybe a combination of both should be used when the height constrained
+        is not fullfilled.
+        """
+        if not(len(self.alt) == len(self.lat) == len(self.lon)):
+            return []
+
+        def check_alt(alt, path):
+            alt_flipped = alt[::-1]
+            return alt_flipped[path[-1]]-alt_flipped[path[-0]] <= 1000
+
+        latlon = np.radians(np.column_stack([self.lat[::-1], self.lon[::-1]]))
+
+        dist_matrix = self.simple_dist_matrix(latlon)
+        graph = self.find_graph(dist_matrix)
+        path = self.find_path(graph, dist_matrix)
+
+        if check_alt(self.alt, path):
+            return self.flip_path(path)
+
+        calculated = []
+        lower_bound = 0
+        best_path = []
+        original_graph = np.copy(graph)
+        iterations = 0
+
+        while True:
+            iterations += 1
+            reverse_from = np.argmax(graph[self.layers-1,:])
+            forbidden_start_index = np.nonzero(self.alt-self.alt[reverse_from] > 1000)[0]
+
+            graph = self.find_graph(dist_matrix, forbidden_start_index)
+            path = self.find_path(graph, dist_matrix, reverse_from=reverse_from)
+
+            distance = graph[self.layers-1,reverse_from]
+            if distance > lower_bound:
+                lower_bound = distance
+                best_path = path
+
+            calculated.append(path[-1])
+            graph[self.layers-1, calculated] = 0
+            original_graph[self.layers-1, calculated] = 0
+
+            # do we still have options to check?
+            remaining = np.nonzero(original_graph[self.layers-1,:] > lower_bound)[0]
+            if not len(remaining):
+                print(f'{iterations} iterations needed')
+                return self.flip_path(best_path)
+            print(f'Remaining options: {len(remaining)}')
