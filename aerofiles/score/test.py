@@ -6,25 +6,21 @@ import datetime as dt
 
 def timeit(n):
     scorer = Scorer()
-    scorer.import_perlan_flight()
+    scorer.import_simple_flight()
 
-    latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
     start_time = time.time()
     for i in range(n):
+        latlon = np.column_stack([np.radians(scorer.lat), np.radians(scorer.lon)])
         dist_matrix = scorer.simple_dist_matrix(latlon)
     print("Dist matrix %s seconds ---" % ((time.time() - start_time)/n))
 
     start_time = time.time()
     for i in range(n):
-        graph, index_graph = scorer.find_graph(dist_matrix)
-        path = scorer.find_path(index_graph, reverse_from=np.argmax(graph[:,scorer.layers-1]))
-    print("Not vectorized %s seconds ---" % ((time.time() - start_time)/n))
+        graph = scorer.find_graph(dist_matrix)
+        path = scorer.find_path(graph, dist_matrix)
+    print("New %s seconds ---" % ((time.time() - start_time)/n))
 
-    start_time = time.time()
-    for i in range(n):
-        graph, index_graph = scorer.find_graph_vectorized(dist_matrix)
-        path = scorer.find_path(index_graph, reverse_from=np.argmax(graph[:,scorer.layers-1]))
-    print("Vectorized %s seconds ---" % ((time.time() - start_time)/n))
+    print(path)
 
 def test_dist_matrix(n):
     scorer = Scorer()
