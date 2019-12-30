@@ -90,7 +90,7 @@ class Scorer:
                 tow_release_index = i
                 break
 
-        records = records[tow_release_index:]
+        # records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
