@@ -12,7 +12,6 @@ from rdp import rdp
 class Scorer:
     """
     Find polygonal line of maximal length with data points as vertices.
-
     Height difference between starting point and end point is maximal 1000m.
     """
 
@@ -108,24 +107,6 @@ class Scorer:
         self.alt = np.array([r['pressure_alt'] for r in records])
         self.time = np.array([r['time'] for r in records])
 
-    def haversine_dist_matrix(self, latlon):
-        """
-        This is factor five slower than using scipy
-        """
-        haversine = DistanceMetric.get_metric('haversine')
-        dists = haversine.pairwise(latlon)
-        return 6371 * dists
-
-    def numpy_dist_matrix(self, latlon):
-        """
-        This is factor three slower than using scipy
-        """
-        theta = np.cos(np.mean(latlon[:,0]))
-        latlon[:,1] *= theta
-        # vfunc = np.vectorize(myfunc)
-        z = np.array([[complex(p[0], p[1]) for p in latlon[:,]]])
-        return abs(z.T-z)
-
     def simple_dist_matrix(self, latlon):
         # latlon.shape (10000,2)
         theta = np.cos(np.mean(latlon[:,0]))
@@ -134,35 +115,60 @@ class Scorer:
         condensed = scipy.spatial.distance.pdist(latlon, 'euclidean')
         return scipy.spatial.distance.squareform(condensed)
 
-    def find_graph(self, dist_matrix, forbidden_start_index=[]):
+    def find_graph(self, dist_matrix, fake_dist_matrix=None):
         """
         Calculates (k,l) shaped graph where k is the number of knots
         (data points) and l is the number of layers or legs.
-
         Graph is used to store the optimum distance that can be achieved with
         l layers and knot k.
+        The index graph stores the indices of the previous knot.
+        Fake_dist_matrix is used to only allow certain start indices that obey
+        the height constrain.
         """
         knots = np.shape(dist_matrix)[0]
-        graph = np.zeros((knots,self.layers+1))
 
-        graph[:,0][forbidden_start_index] = -10000
+        graph = np.zeros((self.layers,knots))
+        index_graph = np.zeros((self.layers,knots), dtype='int32')
+
+        # copy reference to used dist_matrix for init (no extra storage)
+        if fake_dist_matrix is not None:
+            fake_dist_matrix = fake_dist_matrix.T
+            for k in range(0, knots):
+                index_graph[0,k] = np.argmax(fake_dist_matrix[k,:k+1])
+                graph[0,k] = fake_dist_matrix[k,:k+1][index_graph[0,k]]
+        else:
+            for k in range(0, knots):
+                index_graph[0,k] = np.argmax(dist_matrix[k,:k+1])
+                graph[0,k] = dist_matrix[k,:k+1][index_graph[0,k]]
 
         # iterating every layer is vectorized
         for k in range(0, knots):
-            options_graph = (graph[:k+1,:self.layers] +
-                np.expand_dims(dist_matrix[:k+1,k], axis=1))
+            options_graph = (graph[:self.layers-1,:k+1] +
+                np.expand_dims(dist_matrix[k,:k+1], axis=0))
+            index_graph[1:,k] = np.argmax(options_graph, axis=1)
+            row_idx = np.arange(np.shape(options_graph)[0])
+            graph[1:,k] = options_graph[row_idx,index_graph[1:,k]]
 
-            graph[k,1:] = np.max(options_graph, axis=0)
+        return graph.T, index_graph.T
 
-        return graph
 
-    def find_path(self, graph, dist_matrix):
-        path = np.argmax(graph, axis=0)
-        path[0] = np.argmax(graph[:,0]+dist_matrix[:,path[1]], axis=0)
-        return path
+    def find_path(self, index_graph, reverse_from):
+        """
+        Calculates (k,l) shaped graph where k is the number of knots
+        (data points) and l is the number of layers or legs.
+        Graph is used to store the optimum distance that can be achieved with
+        l layers and knot k.
+        The index graph stores the indices of the previous knot.
+        """
+        path = [reverse_from]
+
+        for l in reversed(range(self.layers)):
+            path.append(index_graph[path[-1],l])
+
+        return list(reversed(path))
 
     def distance_from_graph(self, graph):
-        return np.max(graph[:,self.layers])
+        return np.max(graph[:,self.layers-1])
 
     def find_distance(self, path):
         """
@@ -194,33 +200,31 @@ class Scorer:
     def score(self):
         """
         (1) Distance Matrix is calculated using haversine distance
-
         (2) Graph and index graph are calculated
-
         (3) Based on the maximum reachable distance in the last layer, the
             index Graph is traversed to find the corresponding indices
         """
-        if not(len(self.alt) == len(self.lat) == len(self.lon) == True):
+        if not(len(self.alt) == len(self.lat) == len(self.lon)):
             return []
 
-        latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
+        latlon = np.transpose(np.vstack([np.radians(self.lat), np.radians(self.lon)]))
         dist_matrix = self.simple_dist_matrix(latlon)
-        graph = self.find_graph(dist_matrix)
+        graph, index_graph = self.find_graph(dist_matrix)
 
-        return self.find_path(graph, dist_matrix)
+        return self.find_path(index_graph, reverse_from=np.argmax(graph[:,self.layers-1]))
 
-    def score_with_height(self):
-        if not(len(self.alt) == len(self.lat) == len(self.lon) == True):
+    def score_with_height(self, epsilon=None):
+        if not(len(self.alt) == len(self.lat) == len(self.lon)):
             return []
 
         def check_alt(alt, path):
-            return self.alt[path[0]]-self.alt[path[-1]] <= 1000
+            return alt[path[0]]-alt[path[-1]] <= 1000
 
         latlon = np.column_stack([np.radians(self.lat), np.radians(self.lon)])
 
         dist_matrix = self.simple_dist_matrix(latlon)
-        graph, index_graph = self.find_graph_vectorized(dist_matrix)
-        path = self.find_path(graph, dist_matrix)
+        graph, index_graph = self.find_graph(dist_matrix)
+        path = self.find_path(index_graph, reverse_from=np.argmax(graph[:,self.layers-1]))
 
         if check_alt(self.alt, path):
             return path
@@ -234,19 +238,23 @@ class Scorer:
             reverse_from = np.argmax(graph[:,self.layers-1])
             forbidden_start_index = np.nonzero(self.alt-self.alt[reverse_from] > 1000)[0]
 
+            fake_dist_matrix = np.copy(dist_matrix)
+            fake_dist_matrix[forbidden_start_index,:] = -10000
+
             # only use the allowed indexes for the first turnpoint
-            graph = self.find_graph(dist_matrix, forbidden_start_index)
-            path = self.find_path(graph, dist_matrix)
+            height_graph, height_index_graph = self.find_graph(dist_matrix, fake_dist_matrix)
+            path = self.find_path(height_index_graph, reverse_from=reverse_from)
 
             calculated.append(path[-1])
-            graph[calculated,self.layers] = 0
+            height_graph[calculated, self.layers-1] = 0
+            graph[calculated,self.layers-1] = 0
 
             # some tests while developing
             for j in forbidden_start_index:
                 assert(path[0]!=j)
-            assert(check_alt(self.alt, path))
+            assert(check_alt(self.alt, path)) # careful with self.alt alt
 
-            distance = self.distance_from_graph(graph)
+            distance = self.distance_from_graph(height_graph)
             if distance > lower_bound:
                 lower_bound = distance
                 lower_bound_km = self.find_distance(path)
@@ -255,6 +263,6 @@ class Scorer:
             print(f'Lower bound: {lower_bound_km}')
 
             # do we still have options to check?
-            remaining = np.nonzero(graph[:,self.layers] > lower_bound)[0]
+            remaining = np.nonzero(graph[:,self.layers-1] > lower_bound)[0]
             if not len(remaining):
                 return best_path
