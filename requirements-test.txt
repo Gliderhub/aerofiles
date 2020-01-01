@@ -4,7 +4,10 @@
 # Additional requirements for running the testsuite
 pytest==4.6.8
 coverage==4.5.4
+numpy==1.18.0
 pytest-cov==2.8.1
 flake8==3.7.9
 freezegun==0.3.12
+scipy==1.4.1
+scikit-learn==0.22
 six==1.13.0

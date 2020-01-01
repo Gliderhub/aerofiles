@@ -48,4 +48,7 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
+# Mac OS specific stuff
+.DS_Store
+
 tests/welt2000/data/WELT2000.TXT

@@ -1,12 +1,12 @@
 import os
 import numpy as np
 import scipy
-import datetime
+import datetime as dt
 from sklearn.neighbors import DistanceMetric
 from math import radians
 
 from aerofiles.igc import Reader
-from rdp import rdp
+from aerofiles.analyse.config import FlightParsingConfig as Config
 
 
 class Scorer:
@@ -19,7 +19,7 @@ class Scorer:
         self.test_data_dir = 'aerofiles/score/test_data'
 
     def import_torben_flight(self):
-        tow_release = datetime.time(9, 2, 0)
+        tow_release = dt.time(9, 2, 0)
 
         test_file = os.path.join(self.test_data_dir, '87ilqqk1.igc')
         with open(test_file, 'r') as f:
@@ -30,12 +30,24 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        available_ext = [ext['extension_type'] for ext in parsed['fix_record_extensions'][1]]
+        sensors = [
+            s for s in Config.sensors if s in available_ext
+        ]
+        # if not engine_sensors:
+        #     self.notes.append('No engine sensor found')
+        #
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
-        self.time = np.array([r['time'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
-
+        self.sensor = np.array([r[sensors[0]] for r in records])
 
     def import_sebald1_flight(self):
         """https://www.onlinecontest.org/olc-3.0/gliding/flightinfo.html?dsId=6866743
@@ -44,7 +56,7 @@ class Scorer:
         We: 644.21 km
         OLC: 644.2 km
         """
-        tow_release = datetime.time(8, 32, 1)
+        tow_release = dt.time(8, 32, 1)
 
         test_file = os.path.join(self.test_data_dir, '88qd4er1.igc')
         with open(test_file, 'r') as f:
@@ -55,10 +67,15 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
-        self.time = np.array([r['time'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
     def import_sebald2_flight(self):
@@ -66,7 +83,7 @@ class Scorer:
 
         OLC: 754.8 km
         """
-        tow_release = datetime.time(8, 10, 38)
+        tow_release = dt.time(8, 10, 38)
 
         test_file = os.path.join(self.test_data_dir, '86uveqk1.igc')
         with open(test_file, 'r') as f:
@@ -77,10 +94,15 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
-        self.time = np.array([r['time'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
     def import_sebald3_flight(self):
@@ -90,7 +112,7 @@ class Scorer:
         OLC: 565.4 km
         We: 565.42 km
         """
-        tow_release = datetime.time(8, 21, 21)
+        tow_release = dt.time(8, 21, 21)
 
         test_file = os.path.join(self.test_data_dir, '98elgac1.igc')
         with open(test_file, 'r') as f:
@@ -101,10 +123,15 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
-        self.time = np.array([r['time'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
     def import_sebald4_flight(self):
@@ -114,7 +141,7 @@ class Scorer:
         OLC: 335.2 km
         We: 335.23 km
         """
-        tow_release = datetime.time(9, 15, 42)
+        tow_release = dt.time(9, 15, 42)
 
         test_file = os.path.join(self.test_data_dir, '97glgac1.igc')
         with open(test_file, 'r') as f:
@@ -125,10 +152,15 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
-        self.time = np.array([r['time'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
     def import_sebald5_flight(self):
@@ -138,7 +170,7 @@ class Scorer:
         OLC: 725.3 km
         We: 725.29 km
         """
-        tow_release = datetime.time(8, 16, 12)
+        tow_release = dt.time(8, 16, 12)
 
         test_file = os.path.join(self.test_data_dir, '95nv1g91.igc')
         with open(test_file, 'r') as f:
@@ -149,10 +181,15 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
-        self.time = np.array([r['time'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
     def import_sebald6_flight(self):
@@ -162,7 +199,7 @@ class Scorer:
         OLC: 62.3 km
         We: 62.27 km
         """
-        tow_release = datetime.time(9, 14, 20)
+        tow_release = dt.time(9, 14, 20)
 
         test_file = os.path.join(self.test_data_dir, '94cx2191.igc')
         with open(test_file, 'r') as f:
@@ -173,16 +210,21 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
-        self.time = np.array([r['time'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
 
     def import_height_difference_flight(self):
-        tow_release = datetime.time(8, 28, 48)
-        engine_start = datetime.time(15, 34, 0)
+        tow_release = dt.time(8, 28, 48)
+        engine_start = dt.time(15, 34, 0)
 
         test_file = os.path.join(self.test_data_dir, '97glgac1.igc')
         with open(test_file, 'r') as f:
@@ -197,14 +239,19 @@ class Scorer:
                 engine_start_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:engine_start_index]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
-        self.time = np.array([r['time'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
 
     def import_longer_flight(self):
-        tow_release = datetime.time(8, 42, 0)
+        tow_release = dt.time(8, 42, 0)
 
         test_file = os.path.join(self.test_data_dir, '87jv20o1.igc')
         with open(test_file, 'r') as f:
@@ -215,14 +262,19 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
-        self.time = np.array([r['time'] for r in records])
 
     def import_perlan_flight(self):
-        tow_release = datetime.time(16, 54, 10)
+        tow_release = dt.time(16, 54, 10)
 
         test_file = os.path.join(self.test_data_dir, '99bv7r92.igc')
         with open(test_file, 'r') as f:
@@ -233,22 +285,32 @@ class Scorer:
                 tow_release_index = i
                 break
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = records[tow_release_index:]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
-        self.time = np.array([r['time'] for r in records])
 
     def import_simple_flight(self):
         test_file = os.path.join(self.test_data_dir, '825lqkk1.igc')
         with open(test_file, 'r') as f:
             parsed = Reader().read(f)
 
+        utc_date = parsed['header'][1]['utc_date']
+
         records = parsed['fix_records'][1]
         self.lat = np.array([r['lat'] for r in records])
         self.lon = np.array([r['lon'] for r in records])
+        self.time = np.array(
+            [dt.datetime.combine(utc_date, r['time']) for r in records]
+        )
+        self.raw_time = np.array([((r['time'].hour*60)+r['time'].minute)*60+r['time'].second for r in records])
         self.alt = np.array([r['pressure_alt'] for r in records])
-        self.time = np.array([r['time'] for r in records])
 
     def simple_dist_matrix(self, latlon):
         # latlon.shape (10000,2)
