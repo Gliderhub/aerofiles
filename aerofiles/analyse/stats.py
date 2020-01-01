@@ -1,65 +1,104 @@
-from aerofiles.util.geo import haversine_distance, track_distance
+import numpy as np
+
+from aerofiles.util.geo import haversine_distance, track_distance, haversine
 
 
 class Analyser:
     def __init__(self):
         pass
+    # TODO: Add zero division handling everywhere
 
-    def analyse(self, lat, lon, alt, time, raw_time, path):
+    def analyse(self, data, path):
         self.legs = []
         self.contest = {}
+        time = data['time']
+        lon = data['lon']
+        lat = data['lat']
+        time = data['time']
+        alt = data['alt']
+        thermals = data['thermals']
+        glides = data['glides']
+        raw_time = data['raw_time']
+        distance = data['distance']
+        track_distance = data['track_distance']
+        cum_track_distance = np.cumsum(track_distance)
 
-        for i in range(len(path)-1):
+        for start, stop in zip(path, path[1:]):
             leg = {}
-            leg['start'] = path[i]
-            leg['end'] = path[i+1]
+            leg['raw_time'] = raw_time[stop] - raw_time[start]
+            leg_thermals = thermals[(thermals[:,1]>start) & (thermals[:,0]<stop)]
+            leg_thermals = np.clip(leg_thermals, start, stop)
 
-            leg['start_time'] = time[path[i]]
-            leg['end_time'] = time[path[i+1]]
+            leg['thermal_count'] = len(leg_thermals)
+            leg['thermal_gain'] = np.sum(alt[leg_thermals[:,1]]-alt[leg_thermals[:,0]])
+            leg['thermal_time'] = np.sum(raw_time[leg_thermals[:,1]]-raw_time[leg_thermals[:,0]])
+            leg['thermal_avg'] = leg['thermal_gain'] / leg['thermal_time']
+            leg['thermal_percent'] = leg['thermal_time'] / leg['raw_time']
 
-            leg['start_alt'] = alt[path[i]]
-            leg['end_alt'] = alt[path[i+1]]
+            leg_glides = glides[(glides[:,1]>start) & (glides[:,0]<stop)]
+            leg_glides = np.clip(leg_glides, start, stop)
 
-            leg['start_point'] = (lon[path[i]], lat[path[i]])
-            leg['end_point'] = (lon[path[i+1]], lat[path[i+1]])
+            leg['glide_count'] = len(leg_glides)
+            leg['glide_gain'] = np.sum(alt[leg_glides[:,1]]-alt[leg_glides[:,0]])
+            leg['glide_time'] = np.sum(raw_time[leg_glides[:,1]]-raw_time[leg_glides[:,0]])
 
-            leg['distance'] = haversine_distance(
-                lon[path[i]], lat[path[i]],
-                lon[path[i+1]], lat[path[i+1]],
+            # glide_track is in KM
+            leg['glide_track'] = np.sum(cum_track_distance[leg_glides[:,1]]-cum_track_distance[leg_glides[:,0]])
+            # per definition of L/D, we need the negative sign
+            leg['glide_e'] = -(leg['glide_track']*1000 / leg['glide_gain'])
+            leg['glide_percent'] = leg['glide_time'] / leg['raw_time']
+
+            assert(leg['glide_time']+leg['thermal_time']==leg['raw_time'])
+            assert(leg['glide_gain']+leg['thermal_gain']==alt[stop]-alt[start])
+
+            leg['start'] = start
+            leg['end'] = stop
+
+            leg['start_time'] = time[start]
+            leg['end_time'] = time[stop]
+
+            leg['start_alt'] = alt[start]
+            leg['end_alt'] = alt[stop]
+
+            leg['start_point'] = (lon[start], lat[start])
+            leg['end_point'] = (lon[stop], lat[stop])
+
+            leg['distance'] = haversine(
+                lon[start], lat[start],
+                lon[stop], lat[stop],
             )
             leg['speed'] = (
-                3600 * leg['distance'] /
-                (time[path[i+1]]-time[path[i]]).total_seconds()
+                3600 * leg['distance'] / leg['raw_time']
             )
-            leg['track_distance'] = track_distance(
-                lon[path[i]:path[i+1]],
-                lat[path[i]:path[i+1]],
-                )
-            leg['glide_ratio'] = (
-                leg['track_distance'] /
-                alt[path[i+1]] - alt[path[i]]
-            )
+
             self.legs.append(leg)
 
         self.contest['distance'] = sum([leg['distance'] for leg in self.legs])
-        self.contest['track_distance'] = sum(
-            [leg['track_distance'] for leg in self.legs]
+        self.contest['glide_track'] = sum(
+            [leg['glide_track'] for leg in self.legs]
         )
         self.contest['start_time'] = time[path[0]]
         self.contest['end_time'] = time[path[-1]]
+        self.contest['raw_time'] = raw_time[path[-1]] - raw_time[path[0]]
         self.contest['speed'] = (
             3600*self.contest['distance'] /
-            (time[path[-1]]-time[path[0]]).total_seconds()
+            self.contest['raw_time']
         )
+        self.contest['glide_count'] = len(glides[(glides[:,1]>path[0]) & (glides[:,0]<path[-1])])
+        self.contest['glide_gain'] = sum([leg['glide_gain'] for leg in self.legs])
+        self.contest['glide_time'] = sum([leg['glide_time'] for leg in self.legs])
+        self.contest['glide_track'] = sum([leg['glide_track'] for leg in self.legs])
+        self.contest['glide_e'] = -(self.contest['glide_track']*1000 / self.contest['glide_gain'])
+        self.contest['glide_percent'] = self.contest['glide_time'] / self.contest['raw_time']
+
+        self.contest['thermal_count'] = len(thermals[(thermals[:,1]>path[0]) & (thermals[:,0]<path[-1])])
+        self.contest['thermal_gain'] = sum([leg['thermal_gain'] for leg in self.legs])
+        self.contest['thermal_time'] = sum([leg['thermal_time'] for leg in self.legs])
+        self.contest['thermal_avg'] = self.contest['thermal_gain'] / self.contest['thermal_time']
+        self.contest['thermal_percent'] = self.contest['thermal_time'] / self.contest['raw_time']
 
         return self.contest, self.legs
 
-
-    def compute_circling():
-        pass
-
-    def find_thermals():
-        pass
 
     def compute_qnh(self):
         if not (self.fixes and self.flight.takeoff_fix):

@@ -11,49 +11,54 @@ from aerofiles.util.geo import haversine_distance, EARTH_RADIUS_KM
 
 class EmissionGenerator:
     """Compute stuff on already saved flight and fix instances"""
-    def __init__(self, lon, lat, alt, time, raw_time, sensor, config_class=FlightParsingConfig):
-        self.len = len(lon)
+    def __init__(self, data, sensor_type=None, config_class=FlightParsingConfig):
+        self.len = len(data['lon'])
 
-        self.lon = np.array(lon)
-        self.lat = np.array(lat)
-        self.alt = np.array(alt)
-        self.time = np.array(time)
-        self.raw_time = np.array(raw_time)
-        self.raw_time_diff = np.diff(self.raw_time, prepend=[self.raw_time[0]])
-        self.sensor = np.array(sensor)
+        self.lon = data['lon']
+        self.lat = data['lat']
+        self.alt = data['alt']
+        self.time = data['time']
+        self.raw_time = data['raw_time']
+        self.raw_time_diff = data['raw_time_diff']
+        self.sensor = data.get('sensor')
+        self.sensor_type = sensor_type
 
         self.takeoff = None
         self.landing = None
         self.valid = True
 
-        self.sensor_type = 'ENL'
-
         self.config = config_class()
         self.notes = []
 
     def run(self):
-
         self.compute_speeds()
         self.compute_flight()
         self.compute_takeoff_landing()
-        self.compute_engine()
+
         self.compute_bearings()
         self.compute_bearing_change_rates()
-        # self.compute_tow()
-        # self.compute_windows()
-        return 0
-        # return {
-        #     'distances': self.distances,
-        #     'glides': self.glides,
-        #     'thermals': self.thermals,
-        #     'windows': self.windows,
-        #     'ground_speed': self.ground_speed,
-        #     'vario': self.vario,
-        #     'bearings': self.bearings,
-        #     'tow': self.tow,
-        #     'bearing_change': self.bearing_change_rate,
-        #     'notes': self.notes
-        # }
+
+        if self.sensor_type is not None:
+            self.compute_engine()
+
+        self.compute_tow()
+        self.compute_windows()
+        self.compute_circling()
+        self.compute_thermals()
+
+        return {
+            'distance': self.h_dist,
+            'track_distance': self.track_dist,
+            'ground_speed': self.ground_speed,
+            'vario': self.vario,
+            'bearing': self.bearing,
+            'bearing_change_rate': self.bearing_change_rate,
+            'tow': self.tow,
+            'windows': self.windows,
+            'glides': self.glides,
+            'thermals': self.thermals,
+            'notes': self.notes
+        }
 
     def compute_speeds(self):
         """Adds horizontal speed (km/h) and vertical speed (m/s) to self.fixes."""
@@ -64,6 +69,7 @@ class EmissionGenerator:
         lat_diff = np.diff(lat, prepend=lat[0])
 
         self.h_dist = np.hypot(lon_diff, lat_diff) * EARTH_RADIUS_KM
+        # Track distances stores distance accumulated while in glide mode
         self.v_dist = np.diff(self.alt, prepend=self.alt[0])
 
         assert(np.shape(self.h_dist)==np.shape(self.v_dist))
@@ -87,9 +93,7 @@ class EmissionGenerator:
           2. Only emit landings (0) if the downtime is more than
              _config.min_landing_time (or it's the end of the log).
         """
-        print(self.ground_speed)
         emissions = (self.ground_speed > self.config.min_gsp_flight)
-        # print(emissions)
         emissions = emissions.tolist()
         decoder = SimpleViterbiDecoder(
             # More likely to start the log standing, i.e. not in flight
@@ -183,7 +187,7 @@ class EmissionGenerator:
         """
 
         # Step 1: the Viterbi decoder
-        emissions = self.engine_emissions(self.sensor).tolist()
+        emissions = self.engine_emissions().tolist()
         decoder = SimpleViterbiDecoder(
             # More likely to start with engine on
             init_probs=[0.40, 0.60],
@@ -201,14 +205,16 @@ class EmissionGenerator:
         self.engine = outputs
 
     def compute_tow(self):
-        """Adds boolean flag .tow to self.fixes.
+        """Computes boolean array tow.
 
-        This is independend of .engine. Even if the engine is running, the
-        glider might be on tow (push-pull). Therefore, no .tow must False
+        This is independend of engine. Even if the engine is running, the
+        glider might be on tow (push-pull). Therefore, tow must be False
         for self-launches to start scoring
         """
-        emissions = self.tow_emissions()
-        emissions[0] = 1 # start on tow
+        self.tow = np.zeros(self.len, dtype=bool)
+
+        emissions = self.tow_emissions().tolist()
+        # emissions[0] = 1 # start on tow
         decoder = SimpleViterbiDecoder(
             # Flight is most likely to start with tow
             init_probs=[0.00000001, 0.99999999],
@@ -221,44 +227,41 @@ class EmissionGenerator:
                 [0.1, 0.9],  # emissions from on tow
             ])
 
+        start = self.takeoff or 0
         tow_started = False
-        tow_ended = False
-        outputs = decoder.decode(emissions[self.takeoff:])
-        # TODO: Add more logic here, soft minima can be applied.
-        for i in range(self.len):
-            if i < self.takeoff:
-                tow[i] = False
-            elif tow_ended:
-                tow[i] = False
-            else:
-                tow = (outputs[i-self.takeoff] == 1)
-                if tow and not tow_started:
-                    # TOTHINK: Do we need to save the tow start/end fix?
-                    # self.flight.start_tow_fix = self.fixes[i]
-                    tow_started = True
-                if tow_started and not tow:
-                    tow_ended = True
-                    # self.end_tow_fix = self.fixes[i]
-                tow[i] = tow
+        outputs = decoder.decode(emissions[start:])
+
+        for i in range(self.len-start):
+            tow = outputs[i]
+            self.tow[i+start] = tow
+            if tow and not tow_started:
+                tow_started = True
+            if not tow and tow_started:
+                self.tow_end = i+start
+                return
 
     def compute_windows(self):
         """Compute all possible scoring windows of the flight.
-        started_fix is the first fix of the window and ended_fix is the first fix
-        after the window has ended.
+        Windows stores rows of scoring_windows [start_index, end_index]
+        where start_index is the first fix from the scoring intervall and
+        end_fix is the first fix which does not belong to the intervall anymore.
         """
-        window_started = False
-        for i in range(self.len):
-            if scoring[i] and not window_started:
-                window_started = True
-                start = i
-            if not scoring[i] and window_started:
-                window_started = False
-                end = i
-                self.windows.append((start, end))
-        # window still open after iterating all fixes
-        if window_started:
-            end = self.len-1
-            self.windows.append((start, end))
+        self.scoring = np.logical_and(
+            np.logical_not(self.tow),
+            self.flying,
+        )
+        if self.sensor_type is not None:
+            self.scoring = np.logical_and(
+                self.scoring,
+                self.flying,
+                np.logical_not(self.engine),
+            )
+
+        windows = np.flatnonzero(np.insert(np.diff(self.scoring), 0, self.scoring[0]))
+        # if windows has odd length, then last index is end of last scoring intervall
+        if len(windows) % 2:
+            windows = np.append(windows, self.len)
+        self.windows = windows.reshape(-1, 2)
 
     def compute_bearings(self):
         """Computes bearing"""
@@ -270,7 +273,7 @@ class EmissionGenerator:
         x = (np.cos(lat[:-1]) * np.sin(lat[1:]) -
              np.sin(lat[:-1]) * np.cos(lat[1:]) * np.cos(lon_diff))
         bearing = np.degrees(np.arctan2(y, x))
-
+        self.bearing = np.insert(bearing, 0, bearing[0])
 
     def compute_bearing_change_rates(self):
         """
@@ -289,7 +292,7 @@ class EmissionGenerator:
                     break
             return prev_fix
 
-        bearing_change_rate = np.zeros(self.len)
+        self.bearing_change_rate = np.zeros(self.len)
         for curr_fix in range(self.len):
             prev_fix = find_prev_fix(curr_fix)
             if prev_fix is not None:
@@ -300,7 +303,7 @@ class EmissionGenerator:
                     else:
                         bearing_change -= 360.0
                 time_change = self.raw_time[prev_fix] - self.raw_time[curr_fix]
-                bearing_change_rate[curr_fix] = bearing_change/time_change
+                self.bearing_change_rate[curr_fix] = bearing_change/time_change
 
     def circling_emissions(self):
         """Generates raw circling/straight emissions from bearing change.
@@ -308,17 +311,18 @@ class EmissionGenerator:
         to a separate function to be used in Baum-Welch parameters learning.
         """
         return np.logical_and(
-            flying,
-            np.absolute(bearing_change_rate) > self.config.min_bearing_change_circling
+            self.flying,
+            (np.absolute(self.bearing_change_rate) >
+            self.config.min_bearing_change_circling)
         )
 
-    def engine_emissions(self, sensor):
+    def engine_emissions(self):
         """Generates raw engine/no-engine emissions from engine sensor.
         Which sensor to pick is defined in parsing_config
         engine off is encoded as 0, engine running is encoded as 1. Exported
         to a separate function to be used in Baum-Welch parameters learning.
         """
-        return sensor > self.config.min_sensor_level[self.sensor_type]
+        return self.sensor > self.config.min_sensor_level[self.sensor_type]
 
     def tow_emissions(self):
         """Generates raw on-tow/off-tow emissions from bearing change rate
@@ -326,13 +330,13 @@ class EmissionGenerator:
         in Baum-Welch parameters learning.
         """
         return np.logical_and(
-            np.absolute(bearing_change_rate) < self.config.max_bearing_change_on_tow,
-            vario > self.config.min_vario_on_tow
+            np.absolute(self.bearing_change_rate) < self.config.max_bearing_change_on_tow,
+            self.vario > self.config.min_vario_on_tow
         )
 
     def compute_circling(self):
-        """Adds .circling to self.fixes."""
-        emissions = self.circling_emissions()
+        """Computes circling array"""
+        emissions = self.circling_emissions().tolist()
         decoder = SimpleViterbiDecoder(
             # More likely to start in straight flight than in circling
             init_probs=[0.80, 0.20],
@@ -345,15 +349,19 @@ class EmissionGenerator:
                 [0.093, 0.907],  # emissions from circling
             ])
 
-        output = decoder.decode(emissions)
+        self.circling = np.array(decoder.decode(emissions),dtype=bool)
+        # Now we can calculate track distance
+        self.track_dist = np.where(~self.circling, self.h_dist, 0)
 
-    def find_thermals(self):
+    def compute_thermals(self):
         """
         Go through the fixes and find the thermals.
         Every point not in a thermal is put into a glide. If we get to end of
         the fixes and there is still an open glide (i.e. flight not finishing
         in a valid thermal) the glide will be closed.
         """
+        thermals = []
+        glides = []
         if not self.takeoff:
             return
 
@@ -362,69 +370,41 @@ class EmissionGenerator:
 
         circling_now = False
         gliding_now = False
-        first_fix = None
-        first_glide_fix = None
-        last_glide_fix = None
-        distance = 0.0
-        for fix in flight_fixes:
-            if not circling_now and fix.circling:
+        first = None
+        first_glide = None
+        last_glide = None
+        for i in range(self.len):
+            circling = self.circling[i]
+            if not circling_now and circling:
                 # Just started circling
                 circling_now = True
-                first_fix = fix
-                distance_start_circling = distance
-            elif circling_now and not fix.circling:
+                first = i
+            elif circling_now and not circling:
                 # Just ended circling
                 circling_now = False
-                first_fix.flight = self.flight
-                first_fix.save()
-                fix.flight = self.flight
-                fix.save()
-                thermal = Thermal(
-                    start_fix=first_fix,
-                    end_fix=fix
-                )
-                self.thermals.append(thermal)
-                if (thermal.time_change >
-                        self.config.min_time_for_thermal - 1e-5):
-                    self.thermals.append(thermal)
-                    first_glide_fix.flight = self.flight
-                    first_glide_fix.save()
-                    first_fix.flight = self.flight
-                    first_fix.save()
+
+                time_change = self.raw_time[i] - self.raw_time[first]
+                if time_change > self.config.min_time_for_thermal - 1e-5:
+                    thermals.append([first, i])
                     # glide ends at start of thermal
-                    glide = Glide(
-                        start_fix=first_glide_fix,
-                        end_fix=first_fix,
-                        track_length=distance_start_circling
-                    )
-                    self.glides.append(glide)
+                    glides.append([first_glide, first])
                     gliding_now = False
 
             if gliding_now:
-                distance = distance + fix.distance_to(last_glide_fix)
-                last_glide_fix = fix
+                last_glide = i
             else:
                 # just started gliding
-                first_glide_fix = fix
-                last_glide_fix = fix
+                first_glide = i
+                last_glide = i
                 gliding_now = True
-                distance = 0.0
 
         if gliding_now:
-            first_glide_fix.flight = self.flight
-            first_glide_fix.save()
-            last_glide_fix.flight = self.flight
-            last_glide_fix.save()
-            glide = Glide(
-                start_fix=first_glide_fix,
-                end_fix=last_glide_fix,
-                track_length=distance
-            )
-            self.glides.append(glide)
+            glides.append([first_glide, last_glide])
 
-        for glide in self.glides:
-            glide.flight = self.flight
-            glide.save()
-        for thermal in self.thermals:
-            thermal.flight = self.flight
-            thermal.save()
+        self.glides = np.array(glides)
+        self.thermals = np.array(thermals)
+
+        for glide in self.glides[:-1]:
+            assert(glide[1] in self.thermals[:,0])
+        for thermal in self.thermals[:-1]:
+            assert(thermal[1] in self.glides[:,0])

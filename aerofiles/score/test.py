@@ -10,7 +10,7 @@ from sklearn.neighbors import DistanceMetric
 
 def compare_backward_forward(n):
     scorer = Scorer()
-    scorer.import_perlan_flight()
+    scorer.import_torben_flight()
     latlon = np.radians(np.column_stack([scorer.lat, scorer.lon]))
     start_time = time.time()
     for i in range(n):
@@ -96,4 +96,12 @@ def time_cosine(n):
 
     print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
 
-compare_backward_forward(1)
+def test():
+    scorer = Scorer(1, 1, 1)
+    scorer.import_torben_flight()
+    path = scorer.score()
+    dist = scorer.find_distance(path)
+    print(scorer.lat)
+    print(dist)
+
+test()

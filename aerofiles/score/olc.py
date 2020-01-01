@@ -6,6 +6,7 @@ from sklearn.neighbors import DistanceMetric
 from math import radians
 
 from aerofiles.igc import Reader
+from aerofiles.util.geo import haversine
 from aerofiles.analyse.config import FlightParsingConfig as Config
 
 
@@ -14,8 +15,14 @@ class Scorer:
     Find polygonal line of maximal length with data points as vertices.
     Height difference between starting point and end point is maximal 1000m.
     """
-    def __init__(self):
+    def __init__(self, data, start=0, end=None):
+        if end is None:
+            end = len(data['lon'])
+
         self.layers = 7
+        self.lon = data['lon'][start:end]
+        self.lat = data['lat'][start:end]
+        self.alt = data['alt'][start:end]
         self.test_data_dir = 'aerofiles/score/test_data'
 
     def import_torben_flight(self):
@@ -357,25 +364,11 @@ class Scorer:
         We don't store actual distances in the graph anymore. Therefore the
         distance needs to be calculated from the indexes
         """
-        def haversine(lat1, lon1, lat2, lon2):
-            """
-            Calculate the great circle distance between two points
-            on the earth (specified in decimal degrees)
-            """
-            from math import radians, cos, sin, asin, sqrt
-            lat1, lon1, lat2, lon2 = map(radians, (lat1, lon1, lat2, lon2))
-            # calculate haversine
-            lat = lat2 - lat1
-            lon = lon2 - lon1
-            d = sin(lat * 0.5) ** 2 + cos(lat1) * cos(lat2) * sin(lon * 0.5) ** 2
-
-            return 2 * 6371 * asin(sqrt(d))
-
         total_distance = 0
         for p1, p2 in zip(path, path[1:]):
             total_distance += haversine(
-                self.lat[p1], self.lon[p1],
-                self.lat[p2], self.lon[p2],
+                self.lon[p1], self.lat[p1],
+                self.lon[p2], self.lat[p2],
             )
         return total_distance
 

@@ -38,6 +38,20 @@ def sphere_distance(lon1, lat1, lon2, lat2):
          math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2)
     return 2.0 * math.asin(math.sqrt(a))
 
+def haversine(lon1, lat1, lon2, lat2):
+    """
+    Calculate the great circle distance between two points
+    on the earth (specified in decimal degrees)
+    """
+    from math import radians, cos, sin, asin, sqrt
+    lon1, lat1, lon2, lat2 = map(radians, (lon1, lat1, lon2, lat2))
+    # calculate haversine
+    lat = lat2 - lat1
+    lon = lon2 - lon1
+    d = sin(lat * 0.5) ** 2 + cos(lat1) * cos(lat2) * sin(lon * 0.5) ** 2
+
+    return 2 * 6371 * asin(sqrt(d))
+
 def haversine_distance(lon1, lat1, lon2, lat2):
     """Computes Earth distance between two points, in kilometers.
     Input angles are in degrees, WGS-84. Output is in kilometers.
@@ -49,7 +63,7 @@ def haversine_distance(lon1, lat1, lon2, lat2):
     Returns:
         A float, the computed Earth distance.
     """
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
     return EARTH_RADIUS_KM * sphere_distance(lon1, lat1, lon2, lat2)
 
 def bearing_to(lon1, lat1, lon2, lat2):
