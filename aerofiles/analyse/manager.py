@@ -31,7 +31,7 @@ class FlightManager:
     def set_up(self, sensor_required=False):
         """
         This method sets up the data as it will get passed in the pipeline later
-        on
+        on. When receiving data, it is already qnh adjusted. 
         """
         records = self.parsed['fix_records'][1]
         available_ext = [

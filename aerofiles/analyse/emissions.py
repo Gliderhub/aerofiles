@@ -217,7 +217,9 @@ class EmissionGenerator:
         # emissions[0] = 1 # start on tow
         decoder = SimpleViterbiDecoder(
             # Flight is most likely to start with tow
-            init_probs=[0.00000001, 0.99999999],
+            # Value set to lower again, as takeoff is not easy to
+            # regard as tow
+            init_probs=[0.1, 0.9],
             transition_probs=[
                 [0.999999999, 0.000000001],  # transitions normal flight to tow
                 [0.01, 0.99],  # transitions from tow to normal flight
@@ -233,11 +235,12 @@ class EmissionGenerator:
 
         for i in range(self.len-start):
             tow = outputs[i]
-            self.tow[i+start] = tow
+            self.tow[start+i] = tow
             if tow and not tow_started:
                 tow_started = True
+                # if we detect a tow
+                self.tow[start:start+i] = 1
             if not tow and tow_started:
-                self.tow_end = i+start
                 return
 
     def compute_windows(self):
