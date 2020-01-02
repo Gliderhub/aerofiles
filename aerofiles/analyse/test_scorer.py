@@ -1,11 +1,13 @@
 import time
-from .olc import Scorer
+from .score import Scorer
 import numpy as np
 from math import radians
 import datetime as dt
 import scipy
 import sklearn
 from sklearn.neighbors import DistanceMetric
+from sklearn.metrics.pairwise import euclidean_distances
+
 
 
 def compare_backward_forward(n):
@@ -38,46 +40,46 @@ def test_dist_matrix(n):
 
     start_time = time.time()
     for i in range(n):
-        latlon = np.column_stack([np.radians(scorer.lat), np.radians(scorer.lon)])
-    print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
-
-    start_time = time.time()
-    for i in range(n):
+        latlon = np.column_stack([np.radians(scorer.lat), np.radians(scorer.lon)]).astype('float32')
         theta = np.cos(np.mean(latlon[:,0]))
-    print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
-
-    start_time = time.time()
-    for i in range(n):
         latlon[:,1] *= theta
-    print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
-
-    # start_time = time.time()
-    # for i in range(n):
-    #     matrix = sklearn.metrics.pairwise.euclidean_distances(latlon)
-    # print("Sklearn %s seconds ---" % ((time.time() - start_time)/n))
-
-    # start_time = time.time()
-    # for i in range(n):
-    #     matrix1 = scipy.spatial.distance.cdist(latlon, latlon, 'euclidean')
-    # print("Cdist matrix %s seconds ---" % ((time.time() - start_time)/n))
+        matrix1 = scipy.spatial.distance.cdist(latlon, latlon, 'euclidean')
+    print("Float32 matrix %s seconds ---" % ((time.time() - start_time)/n))
 
     start_time = time.time()
     for i in range(n):
-        condensed = scipy.spatial.distance.pdist(latlon, 'euclidean')
-        print(np.shape(condensed))
-    print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
+        latlon = np.column_stack([np.radians(scorer.lat), np.radians(scorer.lon)]).astype('float64')
+        theta = np.cos(np.mean(latlon[:,0]))
+        latlon[:,1] *= theta
+        matrix1 = scipy.spatial.distance.cdist(latlon, latlon, 'euclidean')
+    print("Float64 dist matrix %s seconds ---" % ((time.time() - start_time)/n))
 
     start_time = time.time()
     for i in range(n):
-        N = np.shape(latlon)[0]
-        a,b = np.triu_indices(N,k=1)
+        latlon = np.column_stack([np.radians(scorer.lat), np.radians(scorer.lon)]).astype('float16')
+        theta = np.cos(np.mean(latlon[:,0]))
+        latlon[:,1] *= theta
+        matrix1 = scipy.spatial.distance.cdist(latlon, latlon, 'euclidean')
+    print("Float16 dist matrix %s seconds ---" % ((time.time() - start_time)/n))
 
-        # Fill distance matrix
-        dist_matrix = np.zeros((N,N))
-        for i in range(len(condensed)):
-            dist_matrix[a[i],b[i]] = condensed[i]
-            dist_matrix[b[i],a[i]] = condensed[i]
-    print("Triangular %s seconds ---" % ((time.time() - start_time)/n))
+
+    # start_time = time.time()
+    # for i in range(n):
+    #     condensed = scipy.spatial.distance.pdist(latlon, 'euclidean')
+    #     print(np.shape(condensed))
+    # print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
+    #
+    # start_time = time.time()
+    # for i in range(n):
+    #     N = np.shape(latlon)[0]
+    #     a,b = np.triu_indices(N,k=1)
+    #
+    #     # Fill distance matrix
+    #     dist_matrix = np.zeros((N,N))
+    #     for i in range(len(condensed)):
+    #         dist_matrix[a[i],b[i]] = condensed[i]
+    #         dist_matrix[b[i],a[i]] = condensed[i]
+    # print("Triangular %s seconds ---" % ((time.time() - start_time)/n))
 
     # start_time = time.time()
     # for i in range(n):
@@ -87,21 +89,16 @@ def test_dist_matrix(n):
     # print(condensed[10000])
     # print(matrix3[100, 100])
 
-def time_cosine(n):
+def time_dist_matrix(n):
     scorer = Scorer()
     scorer.import_perlan_flight()
     latlon = np.column_stack([np.radians(scorer.lat), np.radians(scorer.lon)])
     theta = np.cos(np.mean(latlon[:,0]))
     latlon[:,1] *= theta
-
+    start_time = time.time()
+    for i in range(n):
+        res = euclidean_distances(latlon, latlon)
     print("Simpler dist matrix %s seconds ---" % ((time.time() - start_time)/n))
 
-def test():
-    scorer = Scorer(1, 1, 1)
-    scorer.import_torben_flight()
-    path = scorer.score()
-    dist = scorer.find_distance(path)
-    print(scorer.lat)
-    print(dist)
 
-test()
+time_dist_matrix(2)

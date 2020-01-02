@@ -9,6 +9,9 @@ class FlightParsingConfig(object):
     # Flight validation parameters.
     #
 
+    # Minimum of fixes required before takeoff for file to be regarded valid
+    min_fixes_before_takeoff = 5
+
     # Minimum number of fixes in a file.
     min_fixes = 50
 

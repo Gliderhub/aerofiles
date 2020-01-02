@@ -1,5 +1,4 @@
 import numpy as np
-
 from aerofiles.util.geo import haversine
 
 
@@ -45,7 +44,7 @@ class Analyser:
                 raw_time[leg_thermals[:,1]]-raw_time[leg_thermals[:,0]]
             )
             leg['thermal_avg'] = leg['thermal_gain'] / leg['thermal_time']
-            leg['thermal_percent'] = leg['thermal_time'] / leg['raw_time']
+            leg['thermal_percentage'] = leg['thermal_time'] / leg['raw_time']
 
             # only glides fully or partly in the current leg are considered
             # and clipped of at the leg start
@@ -63,13 +62,13 @@ class Analyser:
             )
 
             # glide_track is in KM
-            leg['glide_track'] = np.sum(
+            leg['glide_distance'] = np.sum(
                 cum_track_distance[leg_glides[:,1]] -
                 cum_track_distance[leg_glides[:,0]]
             )
             # per definition of L/D, we need the negative sign
-            leg['glide_e'] = -(leg['glide_track']/leg['glide_gain']) * 1000
-            leg['glide_percent'] = leg['glide_time']/leg['raw_time']
+            leg['glide_ratio'] = -(leg['glide_track']/leg['glide_gain']) * 1000
+            leg['glide_percentage'] = leg['glide_time']/leg['raw_time']
 
             assert(leg['glide_time']+leg['thermal_time']==leg['raw_time'])
             assert(leg['glide_gain']+leg['thermal_gain']==alt[stop]-alt[start])
@@ -94,7 +93,7 @@ class Analyser:
             self.legs.append(leg)
 
         self.contest['distance'] = sum([leg['distance'] for leg in self.legs])
-        self.contest['glide_track'] = sum(
+        self.contest['glide_distance'] = sum(
             [leg['glide_track'] for leg in self.legs]
         )
         self.contest['start_time'] = time[path[0]]
@@ -118,10 +117,10 @@ class Analyser:
         self.contest['glide_track'] = sum(
             [leg['glide_track'] for leg in self.legs]
         )
-        self.contest['glide_e'] = -(
+        self.contest['glide_ratio'] = -(
             self.contest['glide_track'] / self.contest['glide_gain']
         ) * 1000
-        self.contest['glide_percent'] = (
+        self.contest['glide_percentage'] = (
             self.contest['glide_time'] / self.contest['raw_time']
         )
         # We can not sum up over the legs because clipped thermals would count twice
@@ -137,7 +136,7 @@ class Analyser:
         self.contest['thermal_avg'] = (
             self.contest['thermal_gain'] / self.contest['thermal_time']
         )
-        self.contest['thermal_percent'] = (
+        self.contest['thermal_percentage'] = (
             self.contest['thermal_time'] / self.contest['raw_time']
         )
 

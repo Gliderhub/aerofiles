@@ -93,6 +93,8 @@ class EmissionGenerator:
           2. Only emit landings (0) if the downtime is more than
              _config.min_landing_time (or it's the end of the log).
         """
+        # TODO: This whole function needs some work as it is overcomplicated
+
         emissions = (self.ground_speed > self.config.min_gsp_flight)
         emissions = emissions.tolist()
         decoder = SimpleViterbiDecoder(
@@ -111,7 +113,7 @@ class EmissionGenerator:
         # Step 2: apply _config.min_landing_time.
         ignore_next_downtime = False
         apply_next_downtime = True # originally False
-        self.flying = np.zeros_like(outputs)
+        self.flying = np.zeros_like(outputs, dtype=bool)
         for i, output in enumerate(outputs):
             if output == 1:
                 self.flying[i] = True
@@ -159,19 +161,20 @@ class EmissionGenerator:
         is the next fix after the last fix in the flying mode or the
         last fix in the file.
         """
-        was_flying = False
-        for i in range(self.len):
-            if self.flying[i] and self.takeoff is None:
-                self.takeoff = i
-            if not self.flying[i] and was_flying:
-                self.landing = i
-                if self.config.which_flight_to_pick == "first":
-                    # User requested to select just the first flight in the log,
-                    # terminate now.
-                    break
-            was_flying = self.flying[i]
+        flights = np.flatnonzero(np.insert(np.diff(self.flying), 0, False))
+        # if we did not detect landing, last flight ends with last fix
+        # because 0 is prepended to flight array, start will always be found
+        # with np.diff, even if first fix is flying. Therefore we only
+        # need to add flight end when len(flights) is odd.
+        if len(flights) % 2:
+            flights = np.append(flights, self.len)
 
-        if not self.takeoff:
+        # flights contains row of possibly multiple flight start and end
+        self.flights = flights.reshape(-1, 2)
+        if self.config.which_flight_to_pick == "first":
+            pass
+
+        if np.argmax(self.flying) < self.config.min_fixes_before_takeoff:
             self.notes.append('Error: Did not detect takeoff.')
             self.valid = False
 
@@ -365,11 +368,6 @@ class EmissionGenerator:
         """
         thermals = []
         glides = []
-        if not self.takeoff:
-            return
-
-        if not self.landing:
-            landing_index = self.fixes[-1].index
 
         circling_now = False
         gliding_now = False
@@ -377,6 +375,8 @@ class EmissionGenerator:
         first_glide = None
         last_glide = None
         for i in range(self.len):
+            if not self.flying[i]:
+                continue
             circling = self.circling[i]
             if not circling_now and circling:
                 # Just started circling
@@ -401,6 +401,7 @@ class EmissionGenerator:
                 last_glide = i
                 gliding_now = True
 
+        # finish last glide
         if gliding_now:
             glides.append([first_glide, last_glide])
 

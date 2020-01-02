@@ -15,15 +15,16 @@ class Scorer:
     Find polygonal line of maximal length with data points as vertices.
     Height difference between starting point and end point is maximal 1000m.
     """
-    def __init__(self, data, start=0, end=None):
-        if end is None:
-            end = len(data['lon'])
+    def __init__(self, data=None, start=0, end=None):
 
         self.layers = 7
-        self.lon = data['lon'][start:end]
-        self.lat = data['lat'][start:end]
-        self.alt = data['alt'][start:end]
-        self.test_data_dir = 'aerofiles/score/test_data'
+        if data is not None:
+            if end is None:
+                end = len(data['lon'])
+            self.lon = data['lon'][start:end]
+            self.lat = data['lat'][start:end]
+            self.alt = data['alt'][start:end]
+        self.test_data_dir = 'aerofiles/analyse/test_data'
 
     def import_torben_flight(self):
         tow_release = dt.time(9, 2, 0)
